@@ -515,12 +515,61 @@ class FatSecretMCPServer {
                   description: "Meal type (breakfast, lunch, dinner, snack)",
                   enum: ["breakfast", "lunch", "dinner", "snack"],
                 },
+                foodEntryName: {
+                  type: "string",
+                  description: "Name/description of the food entry (e.g., 'Chicken Breast')",
+                },
                 date: {
                   type: "string",
                   description: "Date in YYYY-MM-DD format (default: today)",
                 },
               },
-              required: ["foodId", "servingId", "quantity", "mealType"],
+              required: ["foodId", "servingId", "quantity", "mealType", "foodEntryName"],
+            },
+          },
+          {
+            name: "edit_food_entry",
+            description: "Edit a food entry in the user's diary (can change meal type, quantity, etc.)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                foodEntryId: {
+                  type: "string",
+                  description: "The food entry ID to edit",
+                },
+                foodEntryName: {
+                  type: "string",
+                  description: "New name/description of the food entry (optional)",
+                },
+                servingId: {
+                  type: "string",
+                  description: "New serving ID (optional)",
+                },
+                quantity: {
+                  type: "number",
+                  description: "New quantity (optional)",
+                },
+                mealType: {
+                  type: "string",
+                  description: "New meal type: breakfast, lunch, dinner, or other (optional)",
+                  enum: ["breakfast", "lunch", "dinner", "other"],
+                },
+              },
+              required: ["foodEntryId"],
+            },
+          },
+          {
+            name: "delete_food_entry",
+            description: "Delete a food entry from the user's diary",
+            inputSchema: {
+              type: "object",
+              properties: {
+                foodEntryId: {
+                  type: "string",
+                  description: "The food entry ID to delete",
+                },
+              },
+              required: ["foodEntryId"],
             },
           },
           {
@@ -572,6 +621,10 @@ class FatSecretMCPServer {
           return await this.handleGetUserFoodEntries(request.params.arguments);
         case "add_food_entry":
           return await this.handleAddFoodEntry(request.params.arguments);
+        case "edit_food_entry":
+          return await this.handleEditFoodEntry(request.params.arguments);
+        case "delete_food_entry":
+          return await this.handleDeleteFoodEntry(request.params.arguments);
         case "check_auth_status":
           return await this.handleCheckAuthStatus(request.params.arguments);
         case "get_weight_month":
@@ -942,8 +995,9 @@ class FatSecretMCPServer {
       const params = {
         method: "food_entry.create",
         food_id: args.foodId,
+        food_entry_name: args.foodEntryName,
         serving_id: args.servingId,
-        quantity: args.quantity.toString(),
+        number_of_units: args.quantity.toString(),
         meal: args.mealType,
         date: date,
         format: "json",
@@ -970,6 +1024,104 @@ class FatSecretMCPServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to add food entry: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
+  }
+
+  private async handleEditFoodEntry(args: any) {
+    if (!this.config.accessToken || !this.config.accessTokenSecret) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "User authentication required. Please complete the OAuth flow first.",
+      );
+    }
+
+    try {
+      const params: Record<string, string> = {
+        method: "food_entry.edit",
+        food_entry_id: args.foodEntryId,
+        format: "json",
+      };
+
+      // Add optional parameters if provided
+      if (args.foodEntryName) {
+        params.food_entry_name = args.foodEntryName;
+      }
+      if (args.servingId) {
+        params.serving_id = args.servingId;
+      }
+      if (args.quantity !== undefined) {
+        params.number_of_units = args.quantity.toString();
+      }
+      if (args.mealType) {
+        params.meal = args.mealType;
+      }
+
+      const response = await this.makeApiRequest(
+        "POST",
+        this.baseUrl,
+        params,
+        true,
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Food entry edited successfully!\n\n${
+              JSON.stringify(response, null, 2)
+            }`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to edit food entry: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
+  }
+
+  private async handleDeleteFoodEntry(args: any) {
+    if (!this.config.accessToken || !this.config.accessTokenSecret) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "User authentication required. Please complete the OAuth flow first.",
+      );
+    }
+
+    try {
+      const params = {
+        method: "food_entry.delete",
+        food_entry_id: args.foodEntryId,
+        format: "json",
+      };
+
+      const response = await this.makeApiRequest(
+        "POST",
+        this.baseUrl,
+        params,
+        true,
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Food entry deleted successfully!\n\n${
+              JSON.stringify(response, null, 2)
+            }`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to delete food entry: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
