@@ -325,11 +325,26 @@ class FatSecretMCPServer {
     }
 
     // Try to parse as JSON, fallback to query string
+    let parsed: any;
     try {
-      return JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
       return querystring.parse(text);
     }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "error" in parsed &&
+      (parsed as any).error
+    ) {
+      const err = (parsed as any).error;
+      const code = err?.code ?? "unknown";
+      const message = err?.message ?? JSON.stringify(err);
+      throw new Error(`FatSecret API error ${code}: ${message}`);
+    }
+
+    return parsed;
   }
 
   private setupToolHandlers() {
@@ -510,6 +525,16 @@ class FatSecretMCPServer {
                   type: "number",
                   description: "Quantity of the serving",
                 },
+                numberOfUnits: {
+                  type: "number",
+                  description:
+                    "Number of units for the selected serving (preferred over quantity)",
+                },
+                foodEntryName: {
+                  type: "string",
+                  description:
+                    "Diary entry display name required by FatSecret food_entry.create",
+                },
                 mealType: {
                   type: "string",
                   description: "Meal type (breakfast, lunch, dinner, snack)",
@@ -520,7 +545,7 @@ class FatSecretMCPServer {
                   description: "Date in YYYY-MM-DD format (default: today)",
                 },
               },
-              required: ["foodId", "servingId", "quantity", "mealType"],
+              required: ["foodId", "servingId", "mealType"],
             },
           },
           {
@@ -939,12 +964,22 @@ class FatSecretMCPServer {
 
     try {
       const date = this.dateToFatSecretFormat(args.date);
+      const numberOfUnits = (
+        args.numberOfUnits ?? args.quantity ?? 1
+      ).toString();
+      const foodEntryName = (
+        args.foodEntryName ?? args.food_entry_name ?? "MCP Entry"
+      ).toString();
+      const mealType = (args.mealType || "lunch").toString().toLowerCase();
+      const meal = mealType === "snack" ? "other" : mealType;
+
       const params = {
         method: "food_entry.create",
         food_id: args.foodId,
         serving_id: args.servingId,
-        quantity: args.quantity.toString(),
-        meal: args.mealType,
+        food_entry_name: foodEntryName,
+        number_of_units: numberOfUnits,
+        meal: meal,
         date: date,
         format: "json",
       };
@@ -960,9 +995,7 @@ class FatSecretMCPServer {
         content: [
           {
             type: "text",
-            text: `Food entry added successfully!\n\n${
-              JSON.stringify(response, null, 2)
-            }`,
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };
