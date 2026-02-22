@@ -1,0 +1,9 @@
+{
+    "mcpServers": {
+      "fatsecret-mcp-server": {
+        "type": "http",
+        "command": "node",
+        "args": ["./dist/index.js"]
+      }
+    }
+  }
