@@ -10,8 +10,20 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:platform.fatsecret.com)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__fatsecret__check_auth_status",
+      "mcp__fatsecret__search_foods",
+      "mcp__fatsecret__get_user_food_entries",
+      "mcp__fatsecret__start_oauth_flow",
+      "mcp__fatsecret__complete_oauth_flow",
+      "mcp__fatsecret__get_food",
+      "mcp__fatsecret__add_food_entry",
+      "Read(//c/Users/carlos/**)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "fatsecret"
+  ]
 }

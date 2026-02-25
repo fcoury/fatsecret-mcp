@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## FatSecret MCP Pipe-First Execution (Critical)
+
+For user task execution in this repo (e.g. "apunta", "anade", "registra" foods/combos), use direct one-shot JSON-RPC piping to `node dist/index.js`.
+
+- Do NOT use `npm start` / `npm run dev` / interactive sessions for these requests.
+- Do NOT create helper scripts just to call the MCP.
+- In one-shot pipe mode, call `tools/call` directly (no `initialize` needed).
+
+PowerShell `discovery` example:
+```powershell
+'{"jsonrpc":"2.0","method":"tools/call","params":{"name":"discovery","arguments":{}},"id":1}' | node dist/index.js
+```
+
+PowerShell `execute` example:
+```powershell
+'{"jsonrpc":"2.0","method":"tools/call","params":{"name":"execute","arguments":{"tool":"TOOL_NAME","arguments":{}}},"id":1}' | node dist/index.js
+```
+
+Prefer the skill `.agents/skills/fatsecret-orchestrator/` for natural diary/combo logging behavior.
+
 ## Build and Development Commands
 
 - **Build**: `npm run build` - Compiles TypeScript to JavaScript in the `dist/` directory
@@ -80,3 +100,43 @@ Run tests after building: `npm run build && node utils/test-interactive.js`
 - `node-fetch`: HTTP requests to FatSecret API
 - `dotenv`: Environment variable loading
 - `crypto`: OAuth signature generation
+
+## 📊 Plan Nutricional Personal - Carlos
+
+### Perfil Usuario
+- **Peso actual:** 77 kg
+- **Altura:** 180 cm
+- **Grasa corporal actual:** 16–17%
+- **Objetivo:** Definición → 12–13% grasa corporal
+
+### 🔥 Calorías y Déficit
+- **TDEE estimado:** 2500–2600 kcal
+- **Ingesta objetivo:** 2000–2100 kcal
+- **Déficit:** 18–22% (~0,5–0,7 kg/semana)
+
+### ⚖️ Macronutrientes diarios
+- **Proteína:** 170 g (2,2 g/kg) → ~32%
+- **Grasas:** 70 g (0,9 g/kg) → ~30%
+- **Carbohidratos:** 170 g → ~38%
+
+### 📅 Horarios de comida (ejemplo)
+- **12:00 (rompe ayuno):** Huevos + aguacate + pan/verdura
+- **15:00 (pre-entreno):** Whey + avena/plátano
+- **16:30 (post-entreno):** Pollo/pavo + arroz + verduras + AOVE
+- **20:30 (cena):** Carne magra (pollo, pavo, ternera 5–10% grasa) + patata/boniato + ensalada + frutos secos
+- **23:00 (recena):** Yogur griego 0% + canela
+
+### 💊 Suplementación clave
+- **Proteína en polvo (whey/aislado)** → para cuadrar macros
+- **Omega-3 (EPA/DHA 2–3 g/día)** → sustituto del pescado
+- **Creatina 5 g/día** → fuerza y rendimiento
+
+### 🎯 Objetivo 3 meses
+- **Peso esperado:** 71–72 kg
+- **Grasa corporal:** 12–13%
+- **Pérdida de músculo:** 0–1 kg (mínima si cumples proteína y entreno)
+
+### 🍽️ Comandos Claude Code para Plan Nutricional
+- **`/plan`** - Mostrar resumen completo del plan nutricional
+- **`/macros`** - Calcular estado actual de macros vs objetivos
+- **`/deficit`** - Analizar déficit calórico del día actual
