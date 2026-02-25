@@ -61,6 +61,12 @@ Log a food consumption.
 - `numberOfUnits` (number, required)
 - `mealType` (enum: [breakfast, lunch, dinner, other], required)
 - `date` (string, optional): YYYY-MM-DD (defaults to today)
+Response note (current MCP):
+- Returns JSON text (not prose) with wrapper fields:
+  - `status`
+  - `action`
+  - `food_entry_id` (flattened when available)
+  - `api_response` (raw FatSecret response; may include nested `food_entry_id.value`)
 
 ### `delete_food_entry`
 Remove a log from the diary.

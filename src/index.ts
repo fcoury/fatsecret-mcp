@@ -170,7 +170,27 @@ class FatSecretMCPServer {
             date: date,
           };
           const response = await this.makeApiRequest("POST", this.baseUrl, params, true);
-          return { content: [{ type: "text", text: `Food entry added successfully!\n\n${JSON.stringify(response, null, 2)}` }] };
+          const foodEntryId =
+            typeof response?.food_entry_id === "object" && response?.food_entry_id?.value
+              ? response.food_entry_id.value
+              : response?.food_entry_id ?? null;
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "ok",
+                    action: "add_food_entry",
+                    food_entry_id: foodEntryId,
+                    api_response: response,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
         }
       },
       "delete_food_entry": {
@@ -188,7 +208,23 @@ class FatSecretMCPServer {
             food_entry_id: args.foodEntryId
           };
           const response = await this.makeApiRequest("POST", this.baseUrl, params, true);
-          return { content: [{ type: "text", text: `Food entry deleted successfully!\n\n${JSON.stringify(response, null, 2)}` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "ok",
+                    action: "delete_food_entry",
+                    food_entry_id: args.foodEntryId,
+                    api_response: response,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
         }
       },
       "get_user_food_entries": {
