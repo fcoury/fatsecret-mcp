@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crear Historial Docs"
+  short_description: "Crea historial en docs/sessions y commit opcional"
+  default_prompt: "Crea el historial de esta sesión en docs/sessions con plantilla estándar y commit."
