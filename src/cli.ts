@@ -17,6 +17,7 @@ import readline from "readline";
 import { exec } from "child_process";
 import { promisify } from "util";
 import * as dotenv from "dotenv";
+import { FatSecretPasswordAuthenticator } from "./fatsecret-auth.js";
 
 // Suppress dotenv console output by temporarily overriding console.log
 const originalLog = console.log;
@@ -45,8 +46,9 @@ class FatSecretOAuthConsole {
   constructor() {
     this.configPath = path.join(os.homedir(), ".fatsecret-mcp-config.json");
     this.config = {
-      clientId: process.env.CLIENT_ID || "",
-      clientSecret: process.env.CLIENT_SECRET || "",
+      clientId: process.env.FATSECRET_CLIENT_ID || process.env.CLIENT_ID || "",
+      clientSecret:
+        process.env.FATSECRET_CLIENT_SECRET || process.env.CLIENT_SECRET || "",
     };
   }
 
@@ -60,7 +62,10 @@ class FatSecretOAuthConsole {
   }
 
   private async saveConfig(): Promise<void> {
-    await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
+    await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), {
+      mode: 0o600,
+    });
+    await fs.chmod(this.configPath, 0o600);
   }
 
   private createReadlineInterface(): readline.Interface {
@@ -505,6 +510,11 @@ class FatSecretOAuthConsole {
     try {
       await this.loadConfig();
 
+      if (process.argv.includes("--password-login")) {
+        await this.runPasswordLogin();
+        return;
+      }
+
       console.log("FatSecret OAuth Console Utility\n");
       console.log(
         "This utility will help you authenticate with the FatSecret API.\n",
@@ -535,6 +545,35 @@ class FatSecretOAuthConsole {
       );
       process.exit(1);
     }
+  }
+
+  private async runPasswordLogin(): Promise<void> {
+    const username = process.env.FATSECRET_USERNAME || "";
+    const password = process.env.FATSECRET_PASSWORD || "";
+    if (!this.config.clientId || !this.config.clientSecret) {
+      throw new Error(
+        "Set FATSECRET_CLIENT_ID and FATSECRET_CLIENT_SECRET (or CLIENT_ID and CLIENT_SECRET)",
+      );
+    }
+    if (!username || !password) {
+      throw new Error("Set FATSECRET_USERNAME and FATSECRET_PASSWORD");
+    }
+
+    console.log("Authenticating with FatSecret using the HTTP session flow...");
+    const authenticator = new FatSecretPasswordAuthenticator(
+      this.config.clientId,
+      this.config.clientSecret,
+    );
+    const tokenData = await authenticator.authenticate(username, password);
+    this.config.accessToken = tokenData.oauth_token;
+    this.config.accessTokenSecret = tokenData.oauth_token_secret;
+    this.config.userId = tokenData.user_id;
+    await this.saveConfig();
+
+    console.log("✓ FatSecret authentication completed");
+    console.log(`User ID: ${this.config.userId || "N/A"}`);
+    console.log(`Tokens saved to: ${this.configPath}`);
+    console.log("The username and password were not stored.");
   }
 }
 

@@ -77,6 +77,27 @@ This interactive utility will:
    - Prompts you to paste the verifier code after authorization
    - Saves the access tokens for future use
 
+#### Option 1a: Automated HTTP Session Login
+
+For an account you control, the console can reproduce the OAuth1 PIN flow
+without opening a browser. It requests an OAuth token, submits the FatSecret
+`authorize.aspx` form in a cookie-preserving HTTP session, extracts the
+verifier PIN, and exchanges it for permanent access tokens:
+
+```bash
+FATSECRET_CLIENT_ID=... \
+FATSECRET_CLIENT_SECRET=... \
+FATSECRET_USERNAME=... \
+FATSECRET_PASSWORD=... \
+node dist/cli.js --password-login
+```
+
+Only the client credentials and resulting OAuth access tokens are written to
+`~/.fatsecret-mcp-config.json`. The username and password are not stored. The
+config file is restricted to the current user (`0600`). FatSecret can
+rate-limit repeated login attempts; reuse the saved token rather than logging
+in on every server start.
+
 #### Option 2: Manual Authentication via MCP Tools
 
 If you prefer to authenticate through the MCP interface (e.g., in Claude):
@@ -199,6 +220,13 @@ Complete the OAuth flow with authorization.
 - `requestToken` (string, required): Request token from start_oauth_flow
 - `requestTokenSecret` (string, required): Request token secret from start_oauth_flow
 - `verifier` (string, required): OAuth verifier from authorization
+
+#### `authenticate_with_password`
+
+Run the automated HTTP-session OAuth1 PIN flow. `username` and `password` are
+optional tool arguments; when omitted, the server reads `FATSECRET_USERNAME`
+and `FATSECRET_PASSWORD`. The password is never saved. Prefer the console
+command above for initial setup so passwords do not pass through an MCP client.
 
 #### `check_auth_status`
 

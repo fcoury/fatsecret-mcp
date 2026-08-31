@@ -15,6 +15,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import * as dotenv from "dotenv";
+import { FatSecretPasswordAuthenticator } from "./fatsecret-auth.js";
 
 // Suppress dotenv console output by temporarily overriding console.log
 const originalLog = console.log;
@@ -61,8 +62,9 @@ class FatSecretMCPServer {
 
     this.configPath = path.join(os.homedir(), ".fatsecret-mcp-config.json");
     this.config = {
-      clientId: process.env.CLIENT_ID || "",
-      clientSecret: process.env.CLIENT_SECRET || "",
+      clientId: process.env.FATSECRET_CLIENT_ID || process.env.CLIENT_ID || "",
+      clientSecret:
+        process.env.FATSECRET_CLIENT_SECRET || process.env.CLIENT_SECRET || "",
     };
 
     this.setupToolHandlers();
@@ -78,7 +80,10 @@ class FatSecretMCPServer {
   }
 
   private async saveConfig(): Promise<void> {
-    await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
+    await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), {
+      mode: 0o600,
+    });
+    await fs.chmod(this.configPath, 0o600);
   }
 
   private generateNonce(): string {
@@ -395,6 +400,26 @@ class FatSecretMCPServer {
             },
           },
           {
+            name: "authenticate_with_password",
+            description:
+              "Authenticate with FatSecret using an HTTP session and the OAuth1 PIN flow. Credentials may be supplied as arguments or through FATSECRET_USERNAME and FATSECRET_PASSWORD environment variables. The password is not stored.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                username: {
+                  type: "string",
+                  description:
+                    "FatSecret username (defaults to FATSECRET_USERNAME)",
+                },
+                password: {
+                  type: "string",
+                  description:
+                    "FatSecret password (defaults to FATSECRET_PASSWORD and is not stored)",
+                },
+              },
+            },
+          },
+          {
             name: "search_foods",
             description: "Search for foods in the FatSecret database",
             inputSchema: {
@@ -558,6 +583,10 @@ class FatSecretMCPServer {
           return await this.handleStartOAuthFlow(request.params.arguments);
         case "complete_oauth_flow":
           return await this.handleCompleteOAuthFlow(request.params.arguments);
+        case "authenticate_with_password":
+          return await this.handlePasswordAuthentication(
+            request.params.arguments ?? {},
+          );
         case "search_foods":
           return await this.handleSearchFoods(request.params.arguments);
         case "get_food":
@@ -679,6 +708,55 @@ class FatSecretMCPServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to complete OAuth flow: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
+  }
+
+  private async handlePasswordAuthentication(args: any) {
+    if (!this.config.clientId || !this.config.clientSecret) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "Please set your FatSecret API credentials first",
+      );
+    }
+
+    const username = args.username || process.env.FATSECRET_USERNAME;
+    const password = args.password || process.env.FATSECRET_PASSWORD;
+    if (!username || !password) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "Provide username/password or set FATSECRET_USERNAME and FATSECRET_PASSWORD",
+      );
+    }
+
+    try {
+      const authenticator = new FatSecretPasswordAuthenticator(
+        this.config.clientId,
+        this.config.clientSecret,
+      );
+      const tokenData = await authenticator.authenticate(username, password);
+      this.config.accessToken = tokenData.oauth_token;
+      this.config.accessTokenSecret = tokenData.oauth_token_secret;
+      this.config.userId = tokenData.user_id;
+      await this.saveConfig();
+
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `FatSecret password login completed successfully. The password was not stored.\n\nUser ID: ${
+                this.config.userId || "N/A"
+              }`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `FatSecret password login failed: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
