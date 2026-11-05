@@ -28,6 +28,8 @@ interface FatSecretConfig {
   accessToken?: string;
   accessTokenSecret?: string;
   userId?: string;
+  region?: string;
+  language?: string;
 }
 
 interface OAuthToken {
@@ -79,6 +81,41 @@ class FatSecretMCPServer {
 
   private async saveConfig(): Promise<void> {
     await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
+  }
+
+  // Localization (FatSecret Premier feature): region/language per call,
+  // else saved default (set_locale), else FATSECRET_REGION / FATSECRET_LANGUAGE env.
+  private localeParams(args: any = {}): Record<string, string> {
+    const region = (args?.region || this.config.region || process.env.FATSECRET_REGION || "").trim();
+    const language = (args?.language || this.config.language || process.env.FATSECRET_LANGUAGE || "").trim();
+    const out: Record<string, string> = {};
+    if (region) {
+      out.region = region.toUpperCase();
+      if (language) out.language = language;
+    }
+    return out;
+  }
+
+  private checkApiError(response: any): void {
+    if (response && typeof response === "object" && response.error) {
+      const e = response.error;
+      throw new Error(`FatSecret API error ${e.code ?? ""}: ${e.message ?? JSON.stringify(e)}`);
+    }
+  }
+
+  private async handleSetLocale(args: any) {
+    const region = (args?.region ?? "").toString().trim();
+    const language = (args?.language ?? "").toString().trim();
+    this.config.region = region ? region.toUpperCase() : undefined;
+    this.config.language = language || undefined;
+    await this.saveConfig();
+    const eff = this.localeParams();
+    return {
+      content: [{
+        type: "text",
+        text: `Default locale saved. region: ${this.config.region || "(none)"}, language: ${this.config.language || "(region default)"}\nEffective: ${eff.region ? `${eff.region}/${eff.language || "default"}` : "US/en (FatSecret default)"}`,
+      }],
+    };
   }
 
   private generateNonce(): string {
@@ -256,11 +293,14 @@ class FatSecretMCPServer {
     }
 
     // Try to parse as JSON, fallback to query string
+    let parsed: any;
     try {
-      return JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
       return querystring.parse(text);
     }
+    this.checkApiError(parsed);
+    return parsed;
   }
 
   private async makeApiRequest(
@@ -325,11 +365,14 @@ class FatSecretMCPServer {
     }
 
     // Try to parse as JSON, fallback to query string
+    let parsed: any;
     try {
-      return JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
       return querystring.parse(text);
     }
+    this.checkApiError(parsed);
+    return parsed;
   }
 
   private setupToolHandlers() {
@@ -400,6 +443,14 @@ class FatSecretMCPServer {
             inputSchema: {
               type: "object",
               properties: {
+                region: {
+                  type: "string",
+                  description: 'Optional region code (e.g. "PL", "GB", "DE"). Overrides the saved default. Premier feature.',
+                },
+                language: {
+                  type: "string",
+                  description: 'Optional language code (e.g. "pl", "en"); used only with a region.',
+                },
                 searchExpression: {
                   type: "string",
                   description:
@@ -425,6 +476,14 @@ class FatSecretMCPServer {
             inputSchema: {
               type: "object",
               properties: {
+                region: {
+                  type: "string",
+                  description: 'Optional region code (e.g. "PL", "GB", "DE"). Overrides the saved default. Premier feature.',
+                },
+                language: {
+                  type: "string",
+                  description: 'Optional language code (e.g. "pl", "en"); used only with a region.',
+                },
                 foodId: {
                   type: "string",
                   description: "The FatSecret food ID",
@@ -439,6 +498,14 @@ class FatSecretMCPServer {
             inputSchema: {
               type: "object",
               properties: {
+                region: {
+                  type: "string",
+                  description: 'Optional region code (e.g. "PL", "GB", "DE"). Overrides the saved default. Premier feature.',
+                },
+                language: {
+                  type: "string",
+                  description: 'Optional language code (e.g. "pl", "en"); used only with a region.',
+                },
                 searchExpression: {
                   type: "string",
                   description: "Search term for recipes",
@@ -463,6 +530,14 @@ class FatSecretMCPServer {
             inputSchema: {
               type: "object",
               properties: {
+                region: {
+                  type: "string",
+                  description: 'Optional region code (e.g. "PL", "GB", "DE"). Overrides the saved default. Premier feature.',
+                },
+                language: {
+                  type: "string",
+                  description: 'Optional language code (e.g. "pl", "en"); used only with a region.',
+                },
                 recipeId: {
                   type: "string",
                   description: "The FatSecret recipe ID",
@@ -519,8 +594,24 @@ class FatSecretMCPServer {
                   type: "string",
                   description: "Date in YYYY-MM-DD format (default: today)",
                 },
+                entryName: {
+                  type: "string",
+                  description: "Optional diary entry name (default: the food's name from FatSecret)",
+                },
               },
               required: ["foodId", "servingId", "quantity", "mealType"],
+            },
+          },
+          {
+            name: "set_locale",
+            description:
+              "Set the default FatSecret region/language for food and recipe lookups (e.g. region PL, language pl). Empty values reset to the US default. Localization is a FatSecret Premier feature.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                region: { type: "string", description: 'Region code, e.g. "PL"; empty to clear' },
+                language: { type: "string", description: 'Language code, e.g. "pl"; empty for the region default' },
+              },
             },
           },
           {
@@ -572,6 +663,8 @@ class FatSecretMCPServer {
           return await this.handleGetUserFoodEntries(request.params.arguments);
         case "add_food_entry":
           return await this.handleAddFoodEntry(request.params.arguments);
+        case "set_locale":
+          return await this.handleSetLocale(request.params.arguments);
         case "check_auth_status":
           return await this.handleCheckAuthStatus(request.params.arguments);
         case "get_weight_month":
@@ -694,7 +787,8 @@ class FatSecretMCPServer {
     }
 
     try {
-      const params = {
+      const params: Record<string, string> = {
+        ...this.localeParams(args),
         method: "foods.search",
         search_expression: args.searchExpression,
         page_number: args.pageNumber?.toString() || "0",
@@ -736,7 +830,8 @@ class FatSecretMCPServer {
     }
 
     try {
-      const params = {
+      const params: Record<string, string> = {
+        ...this.localeParams(args),
         method: "food.get",
         food_id: args.foodId,
         format: "json",
@@ -776,7 +871,8 @@ class FatSecretMCPServer {
     }
 
     try {
-      const params = {
+      const params: Record<string, string> = {
+        ...this.localeParams(args),
         method: "recipes.search",
         search_expression: args.searchExpression,
         page_number: args.pageNumber?.toString() || "0",
@@ -818,7 +914,8 @@ class FatSecretMCPServer {
     }
 
     try {
-      const params = {
+      const params: Record<string, string> = {
+        ...this.localeParams(args),
         method: "recipe.get",
         recipe_id: args.recipeId,
         format: "json",
@@ -939,11 +1036,22 @@ class FatSecretMCPServer {
 
     try {
       const date = this.dateToFatSecretFormat(args.date);
+      let entryName: string = args.entryName;
+      if (!entryName) {
+        const food = await this.makeApiRequest(
+          "GET",
+          this.baseUrl,
+          { method: "food.get", food_id: args.foodId, format: "json" },
+          false,
+        );
+        entryName = food?.food?.food_name || `Food ${args.foodId}`;
+      }
       const params = {
         method: "food_entry.create",
+        food_entry_name: entryName,
         food_id: args.foodId,
         serving_id: args.servingId,
-        quantity: args.quantity.toString(),
+        number_of_units: args.quantity.toString(),
         meal: args.mealType,
         date: date,
         format: "json",
@@ -995,7 +1103,7 @@ class FatSecretMCPServer {
           text:
             `Authentication Status: ${status}\n\nCredentials configured: ${hasCredentials}\nUser authenticated: ${hasAccessToken}\nUser ID: ${
               this.config.userId || "N/A"
-            }`,
+            }\nLocale: ${(() => { const l = this.localeParams(); return l.region ? `${l.region}/${l.language || "default"}` : "US/en (default)"; })()}`,
         },
       ],
     };
